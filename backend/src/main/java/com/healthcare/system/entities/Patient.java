@@ -57,6 +57,6 @@ public class Patient extends User {
     private List<VitalSign> vitalSigns;
     
     public enum Gender {
-        MALE, FEMALE, OTHER
+        MALE, FEMALE, UNKNOWN
     }
 }

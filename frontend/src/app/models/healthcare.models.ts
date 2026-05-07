@@ -1,5 +1,5 @@
 export type UserRole = 'ADMIN' | 'DOCTOR' | 'PATIENT' | 'LAB_TECHNICIAN';
-export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
+export type Gender = 'MALE' | 'FEMALE' | 'UNKNOWN';
 export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
 export type EmergencyStatus = 'ACTIVE' | 'IN_PROGRESS' | 'RESOLVED' | 'CANCELLED';
 export type EmergencySeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';

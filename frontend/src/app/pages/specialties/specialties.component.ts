@@ -3,9 +3,156 @@ import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { HealthcareApiService } from '../../core/services/healthcare-api.service';
 import { Specialty } from '../../models/healthcare.models';
 
-@Component({selector:'app-specialties',standalone:true,imports:[ReactiveFormsModule],template:`
-<div class="page-header"><div><p class="eyebrow">Configuration</p><h1>Specialties</h1><p>Manage the clinical specialties available in the platform.</p></div><div class="page-actions"><button class="ghost" type="button" (click)="reload()">Reload</button><button class="primary" type="button" (click)="openCreate()">+ Add specialty</button></div></div>
-@if(message){<div class="notice success">{{message}}</div>}@if(error){<div class="notice warning">{{error}}</div>}
-<section class="panel"><div class="toolbar"><div class="search-box"><span>⌕</span><input placeholder="Search specialties" (input)="query=$any($event.target).value"></div><div class="meta-text">{{filteredSpecialties().length}} specialties</div></div>@if(loading){<div class="loading-row"><span class="spinner"></span> Loading specialties automatically...</div>}@else{<div class="entity-grid">@for(s of filteredSpecialties();track s.id){<article class="entity-card"><div class="record-title"><span class="record-icon">SP</span><div><h3>{{s.name}}</h3><p>#{{s.id}}</p></div></div><p>{{s.description||'No description provided.'}}</p><div class="actions"><button class="tiny" type="button" (click)="openEdit(s)">Edit</button></div></article>}@empty{<p class="empty">No specialties found.</p>}</div>}</section>
-@if(showModal){<div class="modal-backdrop" (click)="closeModal()"><section class="modal small" (click)="$event.stopPropagation()"><header class="modal-header"><div><h2>{{editingId?'Edit specialty':'Create specialty'}}</h2><p>Used when creating or filtering doctors.</p></div><button class="icon-button" type="button" (click)="closeModal()">×</button></header><form class="modal-body grid-form" [formGroup]="form" (ngSubmit)="save()"><label class="wide">Name <input formControlName="name"></label><label class="wide">Description <textarea rows="4" formControlName="description"></textarea></label><div class="modal-footer wide"><button class="ghost" type="button" (click)="closeModal()">Cancel</button><button class="primary" type="submit" [disabled]="form.invalid||saving">{{saving?'Saving...':editingId?'Save changes':'Create specialty'}}</button></div></form></section></div>}`})
-export class SpecialtiesComponent implements OnInit{private readonly api=inject(HealthcareApiService);private readonly fb=inject(FormBuilder);specialties:Specialty[]=[];query='';loading=false;saving=false;showModal=false;editingId?:number;error='';message='';readonly form=this.fb.nonNullable.group({name:['',Validators.required],description:['']});ngOnInit():void{this.reload()}reload():void{this.loading=true;this.error='';this.api.getSpecialties().subscribe({next:s=>{this.specialties=s;this.loading=false},error:()=>{this.error='Could not load specialties.';this.loading=false}})}filteredSpecialties():Specialty[]{const q=this.query.trim().toLowerCase();return q?this.specialties.filter(s=>`${s.name} ${s.description??''}`.toLowerCase().includes(q)):this.specialties}openCreate():void{this.editingId=undefined;this.form.reset({name:'',description:''});this.showModal=true}openEdit(s:Specialty):void{if(!s.id)return;this.editingId=s.id;this.form.reset({name:s.name,description:s.description??''});this.showModal=true}closeModal():void{this.showModal=false;this.saving=false}save():void{if(this.form.invalid)return;this.saving=true;const payload=this.form.getRawValue();(this.editingId?this.api.updateSpecialty(this.editingId,payload):this.api.createSpecialty(payload)).subscribe({next:()=>{this.message=this.editingId?'Specialty updated successfully.':'Specialty created successfully.';this.closeModal();this.reload()},error:e=>{this.error=e.error?.message||e.error?.error||'Could not save specialty.';this.saving=false}})}}
+@Component({
+  selector: 'app-specialties',
+  standalone: true,
+  imports: [ReactiveFormsModule],
+  template: ` <div class="page-header">
+      <div>
+        <p class="eyebrow">Configuration</p>
+        <h1>Specialties</h1>
+        <p>Manage the clinical specialties available in the platform.</p>
+      </div>
+      <div class="page-actions">
+        <button class="ghost" type="button" (click)="reload()">Reload</button
+        ><button class="primary" type="button" (click)="openCreate()">+ Add specialty</button>
+      </div>
+    </div>
+    @if (message) {
+      <div class="notice success">{{ message }}</div>
+    }
+    @if (error) {
+      <div class="notice warning">{{ error }}</div>
+    }
+    <section class="panel">
+      <div class="toolbar">
+        <div class="search-box">
+          <span>⌕</span
+          ><input placeholder="Search specialties" (input)="query = $any($event.target).value" />
+        </div>
+        <div class="meta-text">{{ filteredSpecialties().length }} specialties</div>
+      </div>
+      @if (loading) {
+        <div class="loading-row">
+          <span class="spinner"></span> Loading specialties automatically...
+        </div>
+      } @else {
+        <div class="entity-grid">
+          @for (s of filteredSpecialties(); track s.id) {
+            <article class="entity-card">
+              <div class="record-title">
+                <span class="record-icon">SP</span>
+                <div>
+                  <h3>{{ s.name }}</h3>
+                  <p>#{{ s.id }}</p>
+                </div>
+              </div>
+              <p>{{ s.description || 'No description provided.' }}</p>
+              <div class="actions">
+                <button class="tiny" type="button" (click)="openEdit(s)">Edit</button>
+              </div>
+            </article>
+          } @empty {
+            <p class="empty">No specialties found.</p>
+          }
+        </div>
+      }
+    </section>
+    @if (showModal) {
+      <div class="modal-backdrop" (click)="closeModal()">
+        <section class="modal small" (click)="$event.stopPropagation()">
+          <header class="modal-header">
+            <div>
+              <h2>{{ editingId ? 'Edit specialty' : 'Create specialty' }}</h2>
+              <p>Used when creating or filtering doctors.</p>
+            </div>
+            <button class="icon-button" type="button" (click)="closeModal()">×</button>
+          </header>
+          <form class="modal-body grid-form" [formGroup]="form" (ngSubmit)="save()">
+            <label class="wide">Name <input formControlName="name" /></label
+            ><label class="wide"
+              >Description <textarea rows="4" formControlName="description"></textarea>
+            </label>
+            <div class="modal-footer wide">
+              <button class="ghost" type="button" (click)="closeModal()">Cancel</button
+              ><button class="primary" type="submit" [disabled]="form.invalid || saving">
+                {{ saving ? 'Saving...' : editingId ? 'Save changes' : 'Create specialty' }}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    }`,
+})
+export class SpecialtiesComponent implements OnInit {
+  private readonly api = inject(HealthcareApiService);
+  private readonly fb = inject(FormBuilder);
+  specialties: Specialty[] = [];
+  query = '';
+  loading = false;
+  saving = false;
+  showModal = false;
+  editingId?: number;
+  error = '';
+  message = '';
+  readonly form = this.fb.nonNullable.group({ name: ['', Validators.required], description: [''] });
+  ngOnInit(): void {
+    this.reload();
+  }
+  reload(): void {
+    this.loading = true;
+    this.error = '';
+    this.api.getSpecialties().subscribe({
+      next: (s) => {
+        this.specialties = s;
+        this.loading = false;
+      },
+      error: () => {
+        this.error = 'Could not load specialties.';
+        this.loading = false;
+      },
+    });
+  }
+  filteredSpecialties(): Specialty[] {
+    const q = this.query.trim().toLowerCase();
+    return q
+      ? this.specialties.filter((s) => `${s.name} ${s.description ?? ''}`.toLowerCase().includes(q))
+      : this.specialties;
+  }
+  openCreate(): void {
+    this.editingId = undefined;
+    this.form.reset({ name: '', description: '' });
+    this.showModal = true;
+  }
+  openEdit(s: Specialty): void {
+    if (!s.id) return;
+    this.editingId = s.id;
+    this.form.reset({ name: s.name, description: s.description ?? '' });
+    this.showModal = true;
+  }
+  closeModal(): void {
+    this.showModal = false;
+    this.saving = false;
+  }
+  save(): void {
+    if (this.form.invalid) return;
+    this.saving = true;
+    const payload = this.form.getRawValue();
+    (this.editingId
+      ? this.api.updateSpecialty(this.editingId, payload)
+      : this.api.createSpecialty(payload)
+    ).subscribe({
+      next: () => {
+        this.message = this.editingId
+          ? 'Specialty updated successfully.'
+          : 'Specialty created successfully.';
+        this.closeModal();
+        this.reload();
+      },
+      error: (e) => {
+        this.error = e.error?.message || e.error?.error || 'Could not save specialty.';
+        this.saving = false;
+      },
+    });
+  }
+}
