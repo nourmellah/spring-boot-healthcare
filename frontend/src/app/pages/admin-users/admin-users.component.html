@@ -1,0 +1,357 @@
+<div class="page-header account-header">
+  <div>
+    <p class="eyebrow">Access control</p>
+    <h1>Accounts & permissions</h1>
+    <p>
+      Create real login accounts for each workspace. Patient and doctor accounts
+      are created through their medical profiles, so their portals can load the
+      right data after login.
+    </p>
+  </div>
+
+  <div class="page-actions">
+    <button class="ghost" type="button" (click)="reload()">Reload users</button>
+    <button class="primary" type="button" (click)="openCreate()">+ Create account</button>
+  </div>
+</div>
+
+@if (error) {
+  <div class="notice warning">{{ error }}</div>
+}
+
+@if (message) {
+  <div class="notice success">{{ message }}</div>
+}
+
+@if (lastCreated) {
+  <section class="created-account-banner">
+    <div>
+      <span class="created-icon">✓</span>
+    </div>
+
+    <div>
+      <p class="eyebrow">Account ready</p>
+      <h2>{{ lastCreated.name }}</h2>
+      <p>The user can now sign in with the generated role-specific account.</p>
+
+      <div class="credential-row">
+        <code>{{ lastCreated.email }}</code>
+        <code>{{ lastCreated.password }}</code>
+        <span class="status">{{ lastCreated.role }}</span>
+      </div>
+    </div>
+
+    <button class="ghost" type="button" (click)="lastCreated = null">Hide</button>
+  </section>
+}
+
+<section class="account-role-grid">
+  @for (card of roleCards; track card.role) {
+    <article
+      [class]="'account-role-card ' + card.role.toLowerCase()"
+      (click)="openCreate(card.role)"
+    >
+      <div class="role-icon">{{ card.icon }}</div>
+
+      <div>
+        <span class="status">{{ card.role }}</span>
+        <h3>{{ card.title }}</h3>
+        <p>{{ card.description }}</p>
+      </div>
+
+      <strong>{{ countRole(card.role) }}</strong>
+    </article>
+  }
+</section>
+
+<section class="panel table-panel">
+  <div class="table-header">
+    <div>
+      <h2>User directory</h2>
+      <p class="small-note">
+        Activate or deactivate accounts. Inactive users cannot log in.
+      </p>
+    </div>
+
+    <div class="segment-control compact-segments">
+      @for (role of filters; track role) {
+        <button
+          type="button"
+          [class.active]="filter === role"
+          (click)="filter = role"
+        >
+          {{ role }}
+        </button>
+      }
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-box">
+      <span>⌕</span>
+      <input
+        placeholder="Search name, email or role"
+        (input)="query = $any($event.target).value"
+      />
+    </div>
+
+    <div class="meta-text">
+      {{ filteredUsers().length }} of {{ users.length }}
+      account{{ users.length === 1 ? '' : 's' }}
+    </div>
+  </div>
+
+  <div class="account-list">
+    @for (user of filteredUsers(); track user.id) {
+      <article class="account-row-card">
+        <div class="avatar mini-avatar">{{ initials(user) }}</div>
+
+        <div class="account-main">
+          <div>
+            <strong>{{ user.firstName }} {{ user.lastName }}</strong>
+            <small>{{ user.email }}</small>
+          </div>
+
+          <div class="account-tags">
+            <span class="status">{{ user.role }}</span>
+            <span [class]="user.active ? 'status completed' : 'status cancelled'">
+              {{ user.active ? 'Active' : 'Inactive' }}
+            </span>
+          </div>
+        </div>
+
+        <div class="account-actions">
+          @if (user.id) {
+            @if (user.active) {
+              <button class="tiny danger" type="button" (click)="deactivate(user.id)">
+                Deactivate
+              </button>
+            } @else {
+              <button class="tiny" type="button" (click)="activate(user.id)">
+                Activate
+              </button>
+            }
+          }
+        </div>
+      </article>
+    } @empty {
+      <div class="empty-state small">
+        <span>🔐</span>
+        <strong>No accounts found</strong>
+        <p>Create your first role-specific account to test the login flow.</p>
+      </div>
+    }
+  </div>
+</section>
+
+@if (showModal) {
+  <div class="modal-backdrop" (click)="closeModal()">
+    <section class="modal account-modal" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <div>
+          <h2>Create {{ roleLabel(selectedRole) }} account</h2>
+          <p>{{ roleHelp(selectedRole) }}</p>
+        </div>
+
+        <button class="icon-button" type="button" (click)="closeModal()">×</button>
+      </header>
+
+      <form
+        class="modal-body account-create-layout"
+        [formGroup]="form"
+        (ngSubmit)="createAccount()"
+      >
+        <aside class="role-picker">
+          @for (card of roleCards; track card.role) {
+            <button
+              type="button"
+              [class.active]="selectedRole === card.role"
+              (click)="selectRole(card.role)"
+            >
+              <span>{{ card.icon }}</span>
+              <strong>{{ card.title }}</strong>
+              <small>{{ card.role }}</small>
+            </button>
+          }
+        </aside>
+
+        <div class="account-form-sections">
+          <section class="form-section">
+            <h3>Login identity</h3>
+
+            <div class="grid-form">
+              <label>
+                First name
+                <input formControlName="firstName" placeholder="Sarah" />
+              </label>
+
+              <label>
+                Last name
+                <input formControlName="lastName" placeholder="Smith" />
+              </label>
+
+              <label>
+                Email
+                <input
+                  type="email"
+                  formControlName="email"
+                  placeholder="name@hospital.test"
+                />
+              </label>
+
+              <label>
+                Phone
+                <input formControlName="phone" placeholder="+216 00 000 000" />
+              </label>
+
+              <label>
+                Password
+                <input
+                  type="text"
+                  formControlName="password"
+                  placeholder="Generated or custom password"
+                />
+              </label>
+
+              <label>
+                Role
+                <input [value]="selectedRole" disabled />
+              </label>
+            </div>
+          </section>
+
+          @if (selectedRole === 'PATIENT') {
+            <section class="form-section">
+              <h3>Patient medical profile</h3>
+
+              <div class="grid-form">
+                <label>
+                  Date of birth
+                  <input type="date" formControlName="dateOfBirth" />
+                </label>
+
+                <label>
+                  Gender
+                  <select formControlName="gender">
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </label>
+
+                <label>
+                  Blood group
+                  <input formControlName="bloodGroup" placeholder="O+" />
+                </label>
+
+                <label>
+                  Emergency contact
+                  <input formControlName="emergencyContact" placeholder="+216 00 000 000" />
+                </label>
+
+                <label class="wide">
+                  Address
+                  <input formControlName="address" placeholder="Home address" />
+                </label>
+
+                <label class="wide">
+                  Medical history
+                  <textarea
+                    rows="3"
+                    formControlName="medicalHistory"
+                    placeholder="Allergies, chronic diseases, previous surgeries..."
+                  ></textarea>
+                </label>
+              </div>
+            </section>
+          }
+
+          @if (selectedRole === 'DOCTOR') {
+            <section class="form-section">
+              <h3>Doctor clinical profile</h3>
+
+              <div class="grid-form">
+                <label>
+                  License number
+                  <input formControlName="licenseNumber" placeholder="DOC-1004" />
+                </label>
+
+                <label>
+                  Specialty
+                  <select formControlName="specialtyId">
+                    <option value="">Choose specialty</option>
+                    @for (specialty of specialties; track specialty.id) {
+                      <option [value]="specialty.id">{{ specialty.name }}</option>
+                    }
+                  </select>
+                </label>
+
+                <label>
+                  Experience years
+                  <input type="number" min="0" formControlName="yearsOfExperience" />
+                </label>
+
+                <label>
+                  Consultation fee
+                  <input type="number" min="0" formControlName="consultationFee" />
+                </label>
+
+                <label>
+                  Available days
+                  <input formControlName="availableDays" placeholder="MON,TUE,WED,THU,FRI" />
+                </label>
+
+                <label>
+                  Available hours
+                  <input formControlName="availableHours" placeholder="09:00-17:00" />
+                </label>
+
+                <label class="wide">
+                  Qualifications
+                  <textarea
+                    rows="3"
+                    formControlName="qualifications"
+                    placeholder="Cardiology specialist, MD..."
+                  ></textarea>
+                </label>
+              </div>
+            </section>
+          }
+
+          @if (selectedRole === 'LAB_TECHNICIAN') {
+            <section class="form-section info-section">
+              <h3>Laboratory permissions</h3>
+              <p>
+                This creates a lab technician account that can sign in to the
+                laboratory workspace and manage lab result records.
+              </p>
+            </section>
+          }
+
+          @if (selectedRole === 'ADMIN') {
+            <section class="form-section info-section warning-info">
+              <h3>Administrator permissions</h3>
+              <p>
+                This account can create users, manage access and see
+                administrative screens. Use it only for demo/admin users.
+              </p>
+            </section>
+          }
+
+          <footer class="modal-footer">
+            <button class="ghost" type="button" (click)="generatePassword()">
+              Generate password
+            </button>
+
+            <span class="form-spacer"></span>
+
+            <button class="ghost" type="button" (click)="closeModal()">Cancel</button>
+            <button class="primary" type="submit" [disabled]="form.invalid || saving">
+              {{ saving ? 'Creating...' : 'Create account' }}
+            </button>
+          </footer>
+        </div>
+      </form>
+    </section>
+  </div>
+}
