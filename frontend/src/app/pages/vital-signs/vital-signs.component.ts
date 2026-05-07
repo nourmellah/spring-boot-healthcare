@@ -39,7 +39,10 @@ import { Patient, VitalSign } from '../../models/healthcare.models';
       <section class="panel filter-panel">
         <label>
           Select assigned patient
-          <select [value]="selectedPatientId || ''" (change)="selectPatient($any($event.target).value)">
+          <select
+            [value]="selectedPatientId || ''"
+            (change)="selectPatient($any($event.target).value)"
+          >
             <option value="">Choose patient</option>
             @for (patient of patients; track patient.id) {
               <option [value]="patient.id">{{ patient.firstName }} {{ patient.lastName }}</option>
@@ -86,7 +89,9 @@ import { Patient, VitalSign } from '../../models/healthcare.models';
       </header>
 
       @if (loading) {
-        <div class="loading-row"><span class="spinner"></span> Loading vital signs automatically...</div>
+        <div class="loading-row">
+          <span class="spinner"></span> Loading vital signs automatically...
+        </div>
       } @else {
         <div class="vital-timeline">
           @for (vital of vitals; track vital.id) {
@@ -96,14 +101,38 @@ import { Patient, VitalSign } from '../../models/healthcare.models';
                   <strong>{{ formatDate(vital.recordedAt) }}</strong>
                   <small>{{ patientName(vital) }}</small>
                 </div>
-                <span class="status completed">Recorded</span>
+
+                <div class="actions">
+                  <span class="status completed">Recorded</span>
+                  @if (canManageVital(vital)) {
+                    <button class="secondary tiny" type="button" (click)="openEdit(vital)">
+                      Edit
+                    </button>
+                    <button
+                      class="danger tiny"
+                      type="button"
+                      [disabled]="deletingId === vital.id"
+                      (click)="deleteVital(vital)"
+                    >
+                      {{ deletingId === vital.id ? 'Deleting...' : 'Delete' }}
+                    </button>
+                  }
+                </div>
               </header>
 
               <div class="vital-values">
-                <div><small>BP</small><strong>{{ vital.bloodPressure || '-' }}</strong></div>
-                <div><small>HR</small><strong>{{ vital.heartRate || '-' }}</strong></div>
-                <div><small>Temp</small><strong>{{ vital.temperature || '-' }}</strong></div>
-                <div><small>SpO2</small><strong>{{ vital.oxygenSaturation || '-' }}</strong></div>
+                <div>
+                  <small>BP</small><strong>{{ vital.bloodPressure || '-' }}</strong>
+                </div>
+                <div>
+                  <small>HR</small><strong>{{ vital.heartRate || '-' }}</strong>
+                </div>
+                <div>
+                  <small>Temp</small><strong>{{ vital.temperature || '-' }}</strong>
+                </div>
+                <div>
+                  <small>SpO2</small><strong>{{ vital.oxygenSaturation || '-' }}</strong>
+                </div>
               </div>
 
               @if (vital.notes) {
@@ -126,36 +155,57 @@ import { Patient, VitalSign } from '../../models/healthcare.models';
         <section class="modal" (click)="$event.stopPropagation()">
           <header class="modal-header">
             <div>
-              <h2>Record vital signs</h2>
-              <p>Add the latest patient measurements.</p>
+              <h2>{{ editingVital ? 'Edit vital signs' : 'Record vital signs' }}</h2>
+              <p>
+                {{
+                  editingVital
+                    ? 'Update the recorded measurements. The linked patient stays unchanged.'
+                    : 'Add the latest patient measurements.'
+                }}
+              </p>
             </div>
             <button class="icon-button" type="button" (click)="closeModal()">×</button>
           </header>
 
-          <form class="modal-body grid-form" [formGroup]="form" (ngSubmit)="create()">
-            <label>
-              Patient
-              <select formControlName="patientId">
-                <option value="">Choose patient</option>
-                @for (patient of patients; track patient.id) {
-                  <option [value]="patient.id">{{ patient.firstName }} {{ patient.lastName }}</option>
-                }
-              </select>
-            </label>
+          <form class="modal-body grid-form" [formGroup]="form" (ngSubmit)="save()">
+            @if (!editingVital) {
+              <label>
+                Patient
+                <select formControlName="patientId">
+                  <option value="">Choose patient</option>
+                  @for (patient of patients; track patient.id) {
+                    <option [value]="patient.id">
+                      {{ patient.firstName }} {{ patient.lastName }}
+                    </option>
+                  }
+                </select>
+              </label>
+            } @else {
+              <label>
+                Patient
+                <input [value]="patientName(editingVital)" disabled />
+              </label>
+            }
 
-            <label>Blood pressure <input formControlName="bloodPressure" placeholder="120/80" /></label>
+            <label
+              >Blood pressure <input formControlName="bloodPressure" placeholder="120/80"
+            /></label>
             <label>Heart rate <input type="number" formControlName="heartRate" /></label>
-            <label>Temperature °C <input type="number" step="0.1" formControlName="temperature" /></label>
+            <label
+              >Temperature °C <input type="number" step="0.1" formControlName="temperature"
+            /></label>
             <label>Weight kg <input type="number" step="0.1" formControlName="weight" /></label>
             <label>Height cm <input type="number" step="0.1" formControlName="height" /></label>
             <label>Oxygen % <input type="number" formControlName="oxygenSaturation" /></label>
-            <label>Respiratory rate <input type="number" formControlName="respiratoryRate" /></label>
+            <label
+              >Respiratory rate <input type="number" formControlName="respiratoryRate"
+            /></label>
             <label class="wide">Notes <textarea rows="3" formControlName="notes"></textarea></label>
 
             <div class="modal-footer wide">
               <button class="ghost" type="button" (click)="closeModal()">Cancel</button>
               <button class="primary" type="submit" [disabled]="form.invalid || saving">
-                {{ saving ? 'Saving...' : 'Save vitals' }}
+                {{ saving ? 'Saving...' : editingVital ? 'Update vitals' : 'Save vitals' }}
               </button>
             </div>
           </form>
@@ -173,6 +223,8 @@ export class VitalSignsComponent implements OnInit {
   patients: Patient[] = [];
   vitals: VitalSign[] = [];
   selectedPatientId?: number;
+  editingVital?: VitalSign;
+  deletingId?: number;
   showModal = false;
   saving = false;
   loading = false;
@@ -200,9 +252,19 @@ export class VitalSignsComponent implements OnInit {
     return this.auth.hasRole(['ADMIN', 'DOCTOR']);
   }
 
+  canManageVital(vital: VitalSign): boolean {
+    const user = this.auth.currentUser;
+    if (!user?.id || !vital.id) return false;
+    if (user.role === 'ADMIN') return true;
+
+    return user.role === 'DOCTOR' && vital.recordedBy === user.id;
+  }
+
   pageSubtitle(): string {
-    if (this.auth.hasRole(['PATIENT'])) return 'Track recent clinical measurements recorded by the care team.';
-    if (this.auth.hasRole(['DOCTOR'])) return 'Select an assigned patient, then record or review measurements.';
+    if (this.auth.hasRole(['PATIENT']))
+      return 'Track recent clinical measurements recorded by the care team.';
+    if (this.auth.hasRole(['DOCTOR']))
+      return 'Select an assigned patient, then record, edit, or review measurements.';
 
     return 'Record and review patient measurements in a more visual way.';
   }
@@ -237,6 +299,9 @@ export class VitalSignsComponent implements OnInit {
   }
 
   openCreate(): void {
+    this.error = '';
+    this.message = '';
+    this.editingVital = undefined;
     this.form.reset({
       patientId: this.selectedPatientId ? String(this.selectedPatientId) : '',
       bloodPressure: '',
@@ -251,9 +316,30 @@ export class VitalSignsComponent implements OnInit {
     this.showModal = true;
   }
 
+  openEdit(vital: VitalSign): void {
+    if (!this.canManageVital(vital)) return;
+
+    this.error = '';
+    this.message = '';
+    this.editingVital = vital;
+    this.form.reset({
+      patientId: vital.patient?.id ? String(vital.patient.id) : '',
+      bloodPressure: vital.bloodPressure ?? '',
+      heartRate: vital.heartRate ?? 0,
+      temperature: vital.temperature ?? 0,
+      weight: vital.weight ?? 0,
+      height: vital.height ?? 0,
+      oxygenSaturation: vital.oxygenSaturation ?? 0,
+      respiratoryRate: vital.respiratoryRate ?? 0,
+      notes: vital.notes ?? '',
+    });
+    this.showModal = true;
+  }
+
   closeModal(): void {
     this.showModal = false;
     this.saving = false;
+    this.editingVital = undefined;
   }
 
   reload(): void {
@@ -309,14 +395,11 @@ export class VitalSignsComponent implements OnInit {
     });
   }
 
-  create(): void {
+  save(): void {
     if (this.form.invalid) return;
 
     const raw = this.form.getRawValue();
-    this.saving = true;
-
-    this.api.createVitalSign({
-      patient: { id: Number(raw.patientId) },
+    const payload: Partial<VitalSign> = {
       bloodPressure: raw.bloodPressure,
       heartRate: Number(raw.heartRate),
       temperature: Number(raw.temperature),
@@ -326,16 +409,66 @@ export class VitalSignsComponent implements OnInit {
       respiratoryRate: Number(raw.respiratoryRate),
       notes: raw.notes,
       recordedBy: this.auth.currentUser?.id,
-    }).subscribe({
+    };
+
+    this.saving = true;
+
+    if (this.editingVital?.id) {
+      this.api.updateVitalSign(this.editingVital.id, payload).subscribe({
+        next: () => {
+          this.message = 'Vital signs updated successfully.';
+          this.closeModal();
+          this.reload();
+        },
+        error: (error) => {
+          this.error =
+            error.error?.message || error.error?.error || 'Could not update vital signs.';
+          this.saving = false;
+        },
+      });
+      return;
+    }
+
+    this.api
+      .createVitalSign({
+        ...payload,
+        patient: { id: Number(raw.patientId) },
+      })
+      .subscribe({
+        next: () => {
+          this.message = 'Vital signs saved successfully.';
+          this.selectedPatientId = Number(raw.patientId);
+          this.closeModal();
+          this.reload();
+        },
+        error: (error) => {
+          this.error = error.error?.message || error.error?.error || 'Could not save vital signs.';
+          this.saving = false;
+        },
+      });
+  }
+
+  deleteVital(vital: VitalSign): void {
+    if (!vital.id || !this.canManageVital(vital)) return;
+
+    const confirmed = window.confirm(
+      'Delete this vital sign record? This action cannot be undone.',
+    );
+    if (!confirmed) return;
+
+    this.error = '';
+    this.message = '';
+    this.deletingId = vital.id;
+
+    this.api.deleteVitalSign(vital.id).subscribe({
       next: () => {
-        this.message = 'Vital signs saved successfully.';
-        this.selectedPatientId = Number(raw.patientId);
-        this.closeModal();
+        this.message = 'Vital signs deleted successfully.';
+        this.deletingId = undefined;
         this.reload();
       },
       error: (error) => {
-        this.error = error.error?.message || error.error?.error || 'Could not save vital signs.';
-        this.saving = false;
+        this.error = error.error?.message || error.error?.error || 'Could not delete vital signs.';
+        this.deletingId = undefined;
       },
     });
   }
@@ -345,11 +478,16 @@ export class VitalSignsComponent implements OnInit {
   }
 
   sortVitals(vitals: VitalSign[]): VitalSign[] {
-    return [...vitals].sort((a, b) => `${b.recordedAt ?? ''}`.localeCompare(`${a.recordedAt ?? ''}`));
+    return [...vitals].sort((a, b) =>
+      `${b.recordedAt ?? ''}`.localeCompare(`${a.recordedAt ?? ''}`),
+    );
   }
 
   patientName(vital: VitalSign): string {
-    return `${vital.patient?.firstName ?? ''} ${vital.patient?.lastName ?? ''}`.trim() || `Patient #${vital.patient?.id ?? '-'}`;
+    return (
+      `${vital.patient?.firstName ?? ''} ${vital.patient?.lastName ?? ''}`.trim() ||
+      `Patient #${vital.patient?.id ?? '-'}`
+    );
   }
 
   formatDate(value?: string): string {

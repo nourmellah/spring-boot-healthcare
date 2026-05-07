@@ -54,16 +54,16 @@ public class VitalSignController {
         return ResponseEntity.ok(vitalSignService.getLatestForPatient(patientId));
     }
 
-    // ADMIN and DOCTOR can update
+    // ADMIN can update any vital sign. DOCTOR can update only records they created.
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'DOCTOR')")
     public ResponseEntity<VitalSign> update(@PathVariable Long id, @RequestBody VitalSign vitalSign) {
         return ResponseEntity.ok(vitalSignService.update(id, vitalSign));
     }
 
-    // Only ADMIN can delete
+    // ADMIN can delete any vital sign. DOCTOR can delete only records they created.
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DOCTOR')")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         vitalSignService.delete(id);
         return ResponseEntity.ok("Vital sign deleted successfully");

@@ -69,11 +69,15 @@ import { Gender, Patient } from '../../models/healthcare.models';
             (input)="query = $any($event.target).value"
           />
         </div>
-        <div class="meta-text">{{ filteredPatients().length }} of {{ patients.length }} patients</div>
+        <div class="meta-text">
+          {{ filteredPatients().length }} of {{ patients.length }} patients
+        </div>
       </div>
 
       @if (loading) {
-        <div class="loading-row"><span class="spinner"></span> Loading patients automatically...</div>
+        <div class="loading-row">
+          <span class="spinner"></span> Loading patients automatically...
+        </div>
       } @else {
         <div class="table-wrap">
           <table>
@@ -94,8 +98,11 @@ import { Gender, Patient } from '../../models/healthcare.models';
                     <div class="record-title">
                       <span class="record-icon">{{ initials(patient) }}</span>
                       <div>
-                        <strong>{{ patient.firstName }} {{ patient.lastName }}</strong><br />
-                        <span class="small-note">#{{ patient.id }} · {{ patient.dateOfBirth || 'No birth date' }}</span>
+                        <strong>{{ patient.firstName }} {{ patient.lastName }}</strong
+                        ><br />
+                        <span class="small-note"
+                          >#{{ patient.id }} · {{ patient.dateOfBirth || 'No birth date' }}</span
+                        >
                       </div>
                     </div>
                   </td>
@@ -103,7 +110,9 @@ import { Gender, Patient } from '../../models/healthcare.models';
                     {{ patient.email }}<br />
                     <span class="small-note">{{ patient.phone || '-' }}</span>
                   </td>
-                  <td><span class="badge">{{ patient.bloodGroup || '-' }}</span></td>
+                  <td>
+                    <span class="badge">{{ patient.bloodGroup || '-' }}</span>
+                  </td>
                   <td>{{ patient.gender || '-' }}</td>
                   <td>
                     <span class="status" [class.inactive]="patient.active === false">
@@ -115,6 +124,26 @@ import { Gender, Patient } from '../../models/healthcare.models';
                       <a class="tiny" [routerLink]="['/app/patients', patient.id]">Profile</a>
                       @if (auth.hasRole(['ADMIN'])) {
                         <button class="tiny" type="button" (click)="openEdit(patient)">Edit</button>
+
+                        @if (patient.active === false) {
+                          <button
+                            class="tiny"
+                            type="button"
+                            [disabled]="deactivatingId === patient.id"
+                            (click)="activatePatient(patient)"
+                          >
+                            {{ deactivatingId === patient.id ? 'Saving...' : 'Activate' }}
+                          </button>
+                        } @else {
+                          <button
+                            class="tiny danger"
+                            type="button"
+                            [disabled]="deactivatingId === patient.id"
+                            (click)="deactivatePatient(patient)"
+                          >
+                            {{ deactivatingId === patient.id ? 'Saving...' : 'Deactivate' }}
+                          </button>
+                        }
                       }
                     </div>
                   </td>
@@ -138,7 +167,13 @@ import { Gender, Patient } from '../../models/healthcare.models';
           <header class="modal-header">
             <div>
               <h2>{{ editingId ? 'Edit patient' : 'Register patient' }}</h2>
-              <p>{{ editingId ? 'Update the selected patient profile.' : 'Create a new patient account.' }}</p>
+              <p>
+                {{
+                  editingId
+                    ? 'Update the selected patient profile.'
+                    : 'Create a new patient account.'
+                }}
+              </p>
             </div>
             <button class="icon-button" type="button" (click)="closeModal()">×</button>
           </header>
@@ -169,7 +204,9 @@ import { Gender, Patient } from '../../models/healthcare.models';
             <label class="wide">Address <input formControlName="address" /></label>
             <label>Emergency contact name <input formControlName="emergencyContactName" /></label>
             <label>Emergency phone <input formControlName="emergencyContact" /></label>
-            <label class="wide">Medical history <textarea rows="4" formControlName="medicalHistory"></textarea></label>
+            <label class="wide"
+              >Medical history <textarea rows="4" formControlName="medicalHistory"></textarea>
+            </label>
 
             <div class="modal-footer wide">
               <button class="ghost" type="button" (click)="closeModal()">Cancel</button>
@@ -195,6 +232,7 @@ export class PatientsComponent implements OnInit {
   saving = false;
   showModal = false;
   editingId?: number;
+  deactivatingId?: number;
   error = '';
   message = '';
   appointmentPatientCount = 0;
@@ -367,13 +405,54 @@ export class PatientsComponent implements OnInit {
 
     request.subscribe({
       next: () => {
-        this.message = this.editingId ? 'Patient updated successfully.' : 'Patient created successfully.';
+        this.message = this.editingId
+          ? 'Patient updated successfully.'
+          : 'Patient created successfully.';
         this.closeModal();
         this.reload();
       },
       error: (error) => {
         this.error = error.error?.message || error.error?.error || 'Could not save patient.';
         this.saving = false;
+      },
+    });
+  }
+
+  deactivatePatient(patient: Patient): void {
+    if (!patient.id || !this.auth.hasRole(['ADMIN'])) return;
+
+    const confirmed = window.confirm(
+      'Deactivate this patient account? The patient will not be able to log in, but medical records will be kept.',
+    );
+    if (!confirmed) return;
+
+    this.deactivatingId = patient.id;
+    this.api.deactivateUser(patient.id).subscribe({
+      next: () => {
+        this.message = 'Patient account deactivated. Medical records were kept.';
+        this.deactivatingId = undefined;
+        this.reload();
+      },
+      error: (error) => {
+        this.error = error.error?.message || error.error?.error || 'Could not deactivate patient.';
+        this.deactivatingId = undefined;
+      },
+    });
+  }
+
+  activatePatient(patient: Patient): void {
+    if (!patient.id || !this.auth.hasRole(['ADMIN'])) return;
+
+    this.deactivatingId = patient.id;
+    this.api.activateUser(patient.id).subscribe({
+      next: () => {
+        this.message = 'Patient account activated.';
+        this.deactivatingId = undefined;
+        this.reload();
+      },
+      error: (error) => {
+        this.error = error.error?.message || error.error?.error || 'Could not activate patient.';
+        this.deactivatingId = undefined;
       },
     });
   }

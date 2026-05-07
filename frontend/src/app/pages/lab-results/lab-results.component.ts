@@ -104,8 +104,18 @@ import { Doctor, LabResult, LabStatus, Patient } from '../../models/healthcare.m
                 }
               </div>
 
-              @if (result.filePath) {
-                <footer><span>📎 {{ result.filePath }}</span></footer>
+              @if (result.filePath || canManage(result)) {
+                <footer>
+                  @if (result.filePath) {
+                    <span>📎 {{ result.filePath }}</span>
+                  }
+                  @if (canManage(result)) {
+                    <div class="actions">
+                      <button class="tiny" type="button" (click)="openEdit(result)">Edit</button>
+                      <button class="danger tiny" type="button" (click)="deleteResult(result)">Delete</button>
+                    </div>
+                  }
+                </footer>
               }
             </article>
           } @empty {
@@ -124,13 +134,19 @@ import { Doctor, LabResult, LabStatus, Patient } from '../../models/healthcare.m
         <section class="modal" (click)="$event.stopPropagation()">
           <header class="modal-header">
             <div>
-              <h2>Add lab result</h2>
-              <p>The backend stores metadata and a file path. Real upload is not implemented yet.</p>
+              <h2>{{ editingResult ? 'Edit lab result' : 'Add lab result' }}</h2>
+              <p>
+                @if (editingResult) {
+                  Patient ownership is kept unchanged for safety. Update the result details and status only.
+                } @else {
+                  The backend stores metadata and a file path. Real upload is not implemented yet.
+                }
+              </p>
             </div>
             <button class="icon-button" type="button" (click)="closeModal()">×</button>
           </header>
 
-          <form class="modal-body grid-form" [formGroup]="form" (ngSubmit)="create()">
+          <form class="modal-body grid-form" [formGroup]="form" (ngSubmit)="save()">
             <label>
               Patient
               <select formControlName="patientId">
@@ -168,7 +184,7 @@ import { Doctor, LabResult, LabStatus, Patient } from '../../models/healthcare.m
             <div class="modal-footer wide">
               <button class="ghost" type="button" (click)="closeModal()">Cancel</button>
               <button class="primary" type="submit" [disabled]="form.invalid || saving">
-                {{ saving ? 'Saving...' : 'Save lab result' }}
+                {{ saving ? 'Saving...' : editingResult ? 'Update lab result' : 'Save lab result' }}
               </button>
             </div>
           </form>
@@ -192,6 +208,7 @@ export class LabResultsComponent implements OnInit {
   loading = false;
   error = '';
   message = '';
+  editingResult: LabResult | null = null;
 
   readonly form = this.fb.nonNullable.group({
     patientId: ['', Validators.required],
@@ -211,7 +228,7 @@ export class LabResultsComponent implements OnInit {
 
   title(): string {
     if (this.auth.hasRole(['PATIENT'])) return 'My lab results';
-    if (this.auth.hasRole(['LAB_TECHNICIAN'])) return 'Lab result entry';
+    if (this.auth.hasRole(['LAB_TECHNICIAN'])) return 'My lab uploads';
 
     return 'Lab result inbox';
   }
@@ -219,13 +236,21 @@ export class LabResultsComponent implements OnInit {
   subtitle(): string {
     if (this.auth.hasRole(['PATIENT'])) return 'Review diagnostic reports attached to your patient profile.';
     if (this.auth.hasRole(['DOCTOR'])) return 'Review diagnostic results linked to your doctor profile.';
-    if (this.auth.hasRole(['LAB_TECHNICIAN'])) return 'Create diagnostic records for patients and doctors.';
+    if (this.auth.hasRole(['LAB_TECHNICIAN'])) return 'Create, edit, and delete lab results you uploaded.';
 
     return 'Review diagnostic results and their current status.';
   }
 
   canCreate(): boolean {
     return this.auth.hasRole(['ADMIN', 'LAB_TECHNICIAN']);
+  }
+
+  canManage(result: LabResult): boolean {
+    if (this.auth.hasRole(['ADMIN'])) return true;
+
+    return this.auth.hasRole(['LAB_TECHNICIAN'])
+      && !!result.uploadedBy
+      && result.uploadedBy === this.auth.currentUser?.id;
   }
 
   loadFormOptions(): void {
@@ -251,6 +276,9 @@ export class LabResultsComponent implements OnInit {
   }
 
   openCreate(): void {
+    this.editingResult = null;
+    this.form.controls.patientId.enable();
+    this.form.controls.doctorId.enable();
     this.form.reset({
       patientId: '',
       doctorId: '',
@@ -261,12 +289,36 @@ export class LabResultsComponent implements OnInit {
       filePath: '',
       status: 'PENDING',
     });
+    this.clearAlerts();
+    this.showModal = true;
+  }
+
+  openEdit(result: LabResult): void {
+    if (!this.canManage(result)) return;
+
+    this.editingResult = result;
+    this.form.reset({
+      patientId: result.patient?.id ? String(result.patient.id) : '',
+      doctorId: result.doctor?.id ? String(result.doctor.id) : '',
+      testName: result.testName ?? '',
+      testDate: result.testDate ?? '',
+      results: result.results ?? '',
+      remarks: result.remarks ?? '',
+      filePath: result.filePath ?? '',
+      status: result.status ?? 'PENDING',
+    });
+    this.form.controls.patientId.disable();
+    this.form.controls.doctorId.disable();
+    this.clearAlerts();
     this.showModal = true;
   }
 
   closeModal(): void {
     this.showModal = false;
     this.saving = false;
+    this.editingResult = null;
+    this.form.controls.patientId.enable();
+    this.form.controls.doctorId.enable();
   }
 
   reload(): void {
@@ -277,17 +329,13 @@ export class LabResultsComponent implements OnInit {
     this.loading = true;
     this.error = '';
 
-    if (user.role === 'LAB_TECHNICIAN') {
-      this.results = [];
-      this.loading = false;
-      return;
-    }
-
     const request = user.role === 'PATIENT'
       ? this.api.getPatientLabResults(user.id)
       : user.role === 'DOCTOR'
         ? this.api.getDoctorLabResults(user.id)
-        : this.api.getLabResults();
+        : user.role === 'LAB_TECHNICIAN'
+          ? this.api.getMyUploadedLabResults()
+          : this.api.getLabResults();
 
     request.subscribe({
       next: (results) => {
@@ -313,11 +361,16 @@ export class LabResultsComponent implements OnInit {
     );
   }
 
-  create(): void {
+  save(): void {
     if (this.form.invalid) return;
 
+    this.editingResult ? this.update() : this.create();
+  }
+
+  create(): void {
     const raw = this.form.getRawValue();
     this.saving = true;
+    this.clearAlerts();
 
     this.api.createLabResult({
       patient: { id: Number(raw.patientId) },
@@ -333,16 +386,57 @@ export class LabResultsComponent implements OnInit {
       next: (createdResult) => {
         this.message = 'Lab result saved successfully.';
         this.closeModal();
-
-        if (this.auth.hasRole(['LAB_TECHNICIAN'])) {
-          this.results = [createdResult, ...this.results];
-        } else {
-          this.reload();
-        }
+        this.results = [createdResult, ...this.results];
       },
       error: (error) => {
         this.error = error.error?.message || error.error?.error || 'Could not save lab result.';
         this.saving = false;
+      },
+    });
+  }
+
+  update(): void {
+    if (!this.editingResult?.id) return;
+
+    const raw = this.form.getRawValue();
+    const id = this.editingResult.id;
+    this.saving = true;
+    this.clearAlerts();
+
+    this.api.updateLabResult(id, {
+      testName: raw.testName,
+      testDate: raw.testDate,
+      results: raw.results,
+      remarks: raw.remarks,
+      filePath: raw.filePath,
+      status: raw.status as LabStatus,
+    }).subscribe({
+      next: (updatedResult) => {
+        this.message = 'Lab result updated successfully.';
+        this.results = this.results.map((result) => result.id === id ? updatedResult : result);
+        this.closeModal();
+      },
+      error: (error) => {
+        this.error = error.error?.message || error.error?.error || 'Could not update lab result.';
+        this.saving = false;
+      },
+    });
+  }
+
+  deleteResult(result: LabResult): void {
+    if (!result.id || !this.canManage(result)) return;
+
+    const confirmed = window.confirm(`Delete lab result "${result.testName}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    this.clearAlerts();
+    this.api.deleteLabResult(result.id).subscribe({
+      next: () => {
+        this.results = this.results.filter((current) => current.id !== result.id);
+        this.message = 'Lab result deleted successfully.';
+      },
+      error: (error) => {
+        this.error = error.error?.message || error.error?.error || 'Could not delete lab result.';
       },
     });
   }
@@ -367,14 +461,19 @@ export class LabResultsComponent implements OnInit {
   }
 
   emptyTitle(): string {
-    return this.auth.hasRole(['LAB_TECHNICIAN']) ? 'Result entry mode' : 'No lab results found';
+    return this.auth.hasRole(['LAB_TECHNICIAN']) ? 'No uploaded results yet' : 'No lab results found';
   }
 
   emptyText(): string {
     if (this.auth.hasRole(['LAB_TECHNICIAN'])) {
-      return 'Create a result using the button above. The backend does not expose a full lab-technician inbox yet.';
+      return 'Create a result using the button above. Your own uploaded results will appear here for editing or deletion.';
     }
 
     return 'Diagnostic reports will appear here after they are created.';
+  }
+
+  private clearAlerts(): void {
+    this.error = '';
+    this.message = '';
   }
 }

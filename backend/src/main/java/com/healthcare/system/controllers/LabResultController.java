@@ -33,6 +33,13 @@ public class LabResultController {
         return ResponseEntity.ok(labResultService.getAll());
     }
 
+    // LAB_TECH sees only results uploaded by the authenticated lab technician
+    @GetMapping("/my-uploads")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LAB_TECHNICIAN')")
+    public ResponseEntity<List<LabResult>> getMyUploads() {
+        return ResponseEntity.ok(labResultService.getCurrentUserUploads());
+    }
+
     // ADMIN, DOCTOR, PATIENT (own), LAB_TECH (own)
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'DOCTOR', 'PATIENT', 'LAB_TECHNICIAN')")
@@ -61,16 +68,16 @@ public class LabResultController {
         return ResponseEntity.ok(labResultService.getByStatus(status));
     }
 
-    // LAB_TECH and ADMIN can update results
+    // ADMIN can update any result. LAB_TECH can update only their own uploaded results.
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'LAB_TECHNICIAN')")
     public ResponseEntity<LabResult> update(@PathVariable Long id, @RequestBody LabResult labResult) {
         return ResponseEntity.ok(labResultService.update(id, labResult));
     }
 
-    // Only ADMIN can delete
+    // ADMIN can delete any result. LAB_TECH can delete only their own uploaded results.
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LAB_TECHNICIAN')")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         labResultService.delete(id);
         return ResponseEntity.ok("Lab result deleted successfully");

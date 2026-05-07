@@ -1,6 +1,6 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { forkJoin, of } from 'rxjs';
+import { forkJoin, Observable, of } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 
 import { AuthService } from '../../core/services/auth.service';
@@ -29,6 +29,7 @@ import {
       <div class="page-actions">
         <button class="ghost" type="button" (click)="reload()">Reload</button>
         @if (canCreate()) {
+          <button class="ghost" type="button" (click)="openCreateMedicine()">+ New medicine</button>
           <button class="primary" type="button" (click)="openCreate()">+ New prescription</button>
         }
       </div>
@@ -64,7 +65,101 @@ import {
           <small>Medication lines</small>
         </div>
       </article>
+      @if (canManageInventory()) {
+        <article>
+          <span>⚠</span>
+          <div>
+            <strong>{{ lowStockCount() }}</strong>
+            <small>Low stock</small>
+          </div>
+        </article>
+      }
     </section>
+
+    @if (canManageInventory()) {
+      <section class="panel app-card">
+        <header class="section-heading">
+          <div>
+            <p class="eyebrow">Inventory</p>
+            <h2>Medicine inventory</h2>
+          </div>
+          <button class="primary" type="button" (click)="openCreateMedicine()">
+            + Add medicine
+          </button>
+        </header>
+
+        <div class="toolbar">
+          <div class="search-box">
+            <span>⌕</span>
+            <input
+              placeholder="Search medicine, manufacturer, type or description"
+              (input)="inventoryQuery = $any($event.target).value"
+            />
+          </div>
+          <div class="meta-text">
+            {{ filteredMedicines().length }} medicine{{
+              filteredMedicines().length === 1 ? '' : 's'
+            }}
+          </div>
+        </div>
+
+        <div class="prescription-grid">
+          @for (medicine of filteredMedicines(); track medicine.id) {
+            <article class="prescription-card medicine-rich-card">
+              <header>
+                <div class="prescription-icon">💊</div>
+                <div>
+                  <h3>{{ medicine.name }}</h3>
+                  <p>{{ medicine.manufacturer || 'Generic' }} · {{ medicine.type || 'OTHER' }}</p>
+                </div>
+                <span [class]="medicineStockClass(medicine)">{{
+                  medicineStockText(medicine)
+                }}</span>
+              </header>
+
+              <div class="prescription-detail-grid">
+                <div>
+                  <small>Stock</small>
+                  <strong>{{ medicine.stockQuantity ?? 0 }}</strong>
+                </div>
+                <div>
+                  <small>Unit price</small>
+                  <strong>{{ medicine.unitPrice ?? 0 }}</strong>
+                </div>
+                <div>
+                  <small>Prescription</small>
+                  <strong>{{ medicine.requiresPrescription ? 'Required' : 'Not required' }}</strong>
+                </div>
+                <div class="wide">
+                  <small>Description</small>
+                  <p>{{ medicine.description || 'No description added.' }}</p>
+                </div>
+              </div>
+
+              <footer class="card-footer-actions">
+                <button class="secondary tiny" type="button" (click)="openEditMedicine(medicine)">
+                  Edit medicine
+                </button>
+                <button
+                  class="danger tiny"
+                  type="button"
+                  [disabled]="deletingInventoryMedicineId === medicine.id"
+                  (click)="deleteMedicine(medicine)"
+                >
+                  {{ deletingInventoryMedicineId === medicine.id ? 'Deleting...' : 'Delete' }}
+                </button>
+              </footer>
+            </article>
+          } @empty {
+            <div class="empty-state">
+              <span>💊</span>
+              <strong>No medicines found</strong>
+              <p>Add medicines here, then reuse them inside prescriptions.</p>
+            </div>
+          }
+        </div>
+      </section>
+    }
 
     <section class="panel app-card">
       <div class="toolbar">
@@ -76,12 +171,16 @@ import {
           />
         </div>
         <div class="meta-text">
-          {{ filteredPrescriptions().length }} prescription{{ filteredPrescriptions().length === 1 ? '' : 's' }}
+          {{ filteredPrescriptions().length }} prescription{{
+            filteredPrescriptions().length === 1 ? '' : 's'
+          }}
         </div>
       </div>
 
       @if (loading) {
-        <div class="loading-row"><span class="spinner"></span> Loading prescriptions automatically...</div>
+        <div class="loading-row">
+          <span class="spinner"></span> Loading prescriptions automatically...
+        </div>
       } @else {
         <div class="prescription-grid">
           @for (prescription of filteredPrescriptions(); track prescription.id) {
@@ -113,7 +212,11 @@ import {
               <section class="medicine-list">
                 <div class="medicine-list-header">
                   <strong>Medication plan</strong>
-                  <span>{{ prescription.medicines?.length || 0 }} item{{ prescription.medicines?.length === 1 ? '' : 's' }}</span>
+                  <span
+                    >{{ prescription.medicines?.length || 0 }} item{{
+                      prescription.medicines?.length === 1 ? '' : 's'
+                    }}</span
+                  >
                 </div>
 
                 @for (item of prescription.medicines || []; track item.id) {
@@ -122,10 +225,31 @@ import {
                     <div>
                       <strong>{{ item.medicine.name || 'Medicine' }}</strong>
                       <small>
-                        {{ item.dosage }} · {{ item.frequency }} · {{ item.duration }} day{{ item.duration === 1 ? '' : 's' }}
+                        {{ item.dosage }} · {{ item.frequency }} · {{ item.duration }} day{{
+                          item.duration === 1 ? '' : 's'
+                        }}
                       </small>
                       @if (item.instructions) {
                         <p>{{ item.instructions }}</p>
+                      }
+                      @if (canManagePrescription(prescription)) {
+                        <div class="inline-actions">
+                          <button
+                            class="secondary tiny"
+                            type="button"
+                            (click)="openMedicineModal(prescription, item)"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            class="danger tiny"
+                            type="button"
+                            [disabled]="deletingMedicineLineId === item.id"
+                            (click)="deleteMedicationLine(prescription, item)"
+                          >
+                            {{ deletingMedicineLineId === item.id ? 'Deleting...' : 'Delete' }}
+                          </button>
+                        </div>
                       }
                     </div>
                     <em>Qty {{ item.quantity }}</em>
@@ -135,10 +259,21 @@ import {
                 }
               </section>
 
-              @if (canCreate()) {
+              @if (canManagePrescription(prescription)) {
                 <footer class="card-footer-actions">
                   <button class="tiny" type="button" (click)="openMedicineModal(prescription)">
                     + Add medication
+                  </button>
+                  <button class="secondary tiny" type="button" (click)="openEdit(prescription)">
+                    Edit prescription
+                  </button>
+                  <button
+                    class="danger tiny"
+                    type="button"
+                    [disabled]="deletingPrescriptionId === prescription.id"
+                    (click)="deletePrescription(prescription)"
+                  >
+                    {{ deletingPrescriptionId === prescription.id ? 'Deleting...' : 'Delete' }}
                   </button>
                 </footer>
               }
@@ -159,79 +294,130 @@ import {
         <section class="modal large-modal" (click)="$event.stopPropagation()">
           <header class="modal-header">
             <div>
-              <h2>Create prescription</h2>
-              <p>Create a treatment plan and optionally attach the first medicine.</p>
+              <h2>{{ editingPrescription ? 'Edit prescription' : 'Create prescription' }}</h2>
+              <p>
+                {{
+                  editingPrescription
+                    ? 'Update the diagnosis, instructions, or validity date. Patient and doctor links stay unchanged.'
+                    : 'Create a treatment plan and optionally attach the first medicine.'
+                }}
+              </p>
             </div>
             <button class="icon-button" type="button" (click)="closeCreateModal()">×</button>
           </header>
 
-          <form class="modal-body account-form-sections" [formGroup]="prescriptionForm" (ngSubmit)="createPrescription()">
+          <form
+            class="modal-body account-form-sections"
+            [formGroup]="prescriptionForm"
+            (ngSubmit)="savePrescription()"
+          >
             <section class="form-section grid-form">
               <h3 class="wide">Prescription details</h3>
 
-              <label>
-                Patient
-                <select formControlName="patientId">
-                  <option value="">Choose patient</option>
-                  @for (patient of patients; track patient.id) {
-                    <option [value]="patient.id">{{ patient.firstName }} {{ patient.lastName }}</option>
-                  }
-                </select>
-              </label>
-
-              @if (auth.hasRole(['ADMIN'])) {
+              @if (editingPrescription) {
+                <label>Patient <input [value]="patientName(editingPrescription)" disabled /></label>
+                <label>Doctor <input [value]="doctorName(editingPrescription)" disabled /></label>
+              } @else {
                 <label>
-                  Doctor
-                  <select formControlName="doctorId">
-                    <option value="">Choose doctor</option>
-                    @for (doctor of doctors; track doctor.id) {
-                      <option [value]="doctor.id">Dr. {{ doctor.firstName }} {{ doctor.lastName }}</option>
+                  Patient
+                  <select formControlName="patientId">
+                    <option value="">Choose patient</option>
+                    @for (patient of patients; track patient.id) {
+                      <option [value]="patient.id">
+                        {{ patient.firstName }} {{ patient.lastName }}
+                      </option>
                     }
                   </select>
                 </label>
+
+                @if (auth.hasRole(['ADMIN'])) {
+                  <label>
+                    Doctor
+                    <select formControlName="doctorId">
+                      <option value="">Choose doctor</option>
+                      @for (doctor of doctors; track doctor.id) {
+                        <option [value]="doctor.id">
+                          Dr. {{ doctor.firstName }} {{ doctor.lastName }}
+                        </option>
+                      }
+                    </select>
+                  </label>
+                }
               }
 
               <label>Valid until <input type="date" formControlName="validUntil" /></label>
-              <label class="wide">Diagnosis <textarea rows="3" formControlName="diagnosis"></textarea></label>
-              <label class="wide">Instructions <textarea rows="3" formControlName="instructions"></textarea></label>
+              <label class="wide"
+                >Diagnosis <textarea rows="3" formControlName="diagnosis"></textarea>
+              </label>
+              <label class="wide"
+                >Instructions <textarea rows="3" formControlName="instructions"></textarea>
+              </label>
             </section>
 
-            <section class="form-section grid-form" [formGroup]="medicineForm">
-              <h3 class="wide">First medication item</h3>
+            @if (!editingPrescription) {
+              <section class="form-section grid-form" [formGroup]="medicineForm">
+                <h3 class="wide">First medication item</h3>
 
-              <label class="wide">
-                Existing medicine
-                <select formControlName="medicineId">
-                  <option value="">Create or choose medicine</option>
-                  @for (medicine of medicines; track medicine.id) {
-                    <option [value]="medicine.id">{{ medicine.name }} · {{ medicine.type || 'OTHER' }}</option>
-                  }
-                </select>
-              </label>
+                <label class="wide">
+                  Existing medicine
+                  <select formControlName="medicineId">
+                    <option value="">Create or choose medicine</option>
+                    @for (medicine of medicines; track medicine.id) {
+                      <option [value]="medicine.id">
+                        {{ medicine.name }} · {{ medicine.type || 'OTHER' }}
+                      </option>
+                    }
+                  </select>
+                </label>
 
-              <label>New medicine name <input formControlName="newMedicineName" placeholder="Paracetamol" /></label>
-              <label>Manufacturer <input formControlName="manufacturer" placeholder="Generic" /></label>
-              <label>
-                Type
-                <select formControlName="type">
-                  @for (type of medicineTypes; track type) {
-                    <option [value]="type">{{ type }}</option>
-                  }
-                </select>
-              </label>
-              <label>Dosage <input formControlName="dosage" placeholder="500mg" /></label>
-              <label>Frequency <input formControlName="frequency" placeholder="Twice daily" /></label>
-              <label>Duration in days <input type="number" min="1" formControlName="duration" /></label>
-              <label>Quantity <input type="number" min="1" formControlName="quantity" /></label>
-              <label class="wide">Medication instructions <textarea rows="2" formControlName="instructions"></textarea></label>
-            </section>
+                <label
+                  >New medicine name
+                  <input formControlName="newMedicineName" placeholder="Paracetamol"
+                /></label>
+                <label
+                  >Manufacturer <input formControlName="manufacturer" placeholder="Generic"
+                /></label>
+                <label>
+                  Type
+                  <select formControlName="type">
+                    @for (type of medicineTypes; track type) {
+                      <option [value]="type">{{ type }}</option>
+                    }
+                  </select>
+                </label>
+                <label>Dosage <input formControlName="dosage" placeholder="500mg" /></label>
+                <label
+                  >Frequency <input formControlName="frequency" placeholder="Twice daily"
+                /></label>
+                <label
+                  >Duration in days <input type="number" min="1" formControlName="duration"
+                /></label>
+                <label>Quantity <input type="number" min="1" formControlName="quantity" /></label>
+                <label class="wide"
+                  >Medication instructions
+                  <textarea rows="2" formControlName="instructions"></textarea>
+                </label>
+              </section>
+            }
 
             <div class="modal-footer">
-              <span class="small-note">Leave medication fields empty if you only want to create the prescription record.</span>
+              <span class="small-note">
+                {{
+                  editingPrescription
+                    ? 'Only prescription details are edited here.'
+                    : 'Leave medication fields empty if you only want to create the prescription record.'
+                }}
+              </span>
               <span class="form-spacer"></span>
               <button class="ghost" type="button" (click)="closeCreateModal()">Cancel</button>
               <button class="primary" type="submit" [disabled]="prescriptionForm.invalid || saving">
-                {{ saving ? 'Saving...' : 'Create prescription' }}
+                {{
+                  saving
+                    ? 'Saving...'
+                    : editingPrescription
+                      ? 'Update prescription'
+                      : 'Create prescription'
+                }}
               </button>
             </div>
           </form>
@@ -239,30 +425,45 @@ import {
       </div>
     }
 
-    @if (showMedicineModal) {
+    @if (showMedicineModal && selectedPrescription) {
       <div class="modal-backdrop" (click)="closeMedicineModal()">
         <section class="modal" (click)="$event.stopPropagation()">
           <header class="modal-header">
             <div>
-              <h2>Add medication</h2>
-              <p>{{ selectedPrescription?.diagnosis || 'Prescription' }} · {{ patientName(selectedPrescription) }}</p>
+              <h2>{{ editingMedicine ? 'Edit medication' : 'Add medication' }}</h2>
+              <p>
+                {{ selectedPrescription.diagnosis || 'Prescription' }} ·
+                {{ patientName(selectedPrescription) }}
+              </p>
             </div>
             <button class="icon-button" type="button" (click)="closeMedicineModal()">×</button>
           </header>
 
-          <form class="modal-body grid-form" [formGroup]="medicineForm" (ngSubmit)="addMedicationToSelected()">
+          <form
+            class="modal-body grid-form"
+            [formGroup]="medicineForm"
+            (ngSubmit)="saveMedicationToSelected()"
+          >
             <label class="wide">
               Existing medicine
               <select formControlName="medicineId">
-                <option value="">Create or choose medicine</option>
+                <option value="">
+                  {{ editingMedicine ? 'Keep current medicine' : 'Create or choose medicine' }}
+                </option>
                 @for (medicine of medicines; track medicine.id) {
-                  <option [value]="medicine.id">{{ medicine.name }} · {{ medicine.type || 'OTHER' }}</option>
+                  <option [value]="medicine.id">
+                    {{ medicine.name }} · {{ medicine.type || 'OTHER' }}
+                  </option>
                 }
               </select>
             </label>
 
-            <label>New medicine name <input formControlName="newMedicineName" placeholder="Ibuprofen" /></label>
-            <label>Manufacturer <input formControlName="manufacturer" placeholder="Generic" /></label>
+            <label
+              >New medicine name <input formControlName="newMedicineName" placeholder="Ibuprofen"
+            /></label>
+            <label
+              >Manufacturer <input formControlName="manufacturer" placeholder="Generic"
+            /></label>
             <label>
               Type
               <select formControlName="type">
@@ -273,14 +474,82 @@ import {
             </label>
             <label>Dosage <input formControlName="dosage" placeholder="200mg" /></label>
             <label>Frequency <input formControlName="frequency" placeholder="Once daily" /></label>
-            <label>Duration in days <input type="number" min="1" formControlName="duration" /></label>
+            <label
+              >Duration in days <input type="number" min="1" formControlName="duration"
+            /></label>
             <label>Quantity <input type="number" min="1" formControlName="quantity" /></label>
-            <label class="wide">Instructions <textarea rows="3" formControlName="instructions"></textarea></label>
+            <label class="wide"
+              >Instructions <textarea rows="3" formControlName="instructions"></textarea>
+            </label>
 
             <div class="modal-footer wide">
               <button class="ghost" type="button" (click)="closeMedicineModal()">Cancel</button>
               <button class="primary" type="submit" [disabled]="saving">
-                {{ saving ? 'Saving...' : 'Add medication' }}
+                {{
+                  saving ? 'Saving...' : editingMedicine ? 'Update medication' : 'Add medication'
+                }}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    }
+
+    @if (showInventoryModal) {
+      <div class="modal-backdrop" (click)="closeInventoryModal()">
+        <section class="modal" (click)="$event.stopPropagation()">
+          <header class="modal-header">
+            <div>
+              <h2>{{ editingInventoryMedicine ? 'Edit medicine' : 'Add medicine' }}</h2>
+              <p>Manage the reusable medicine catalog used by prescriptions.</p>
+            </div>
+            <button class="icon-button" type="button" (click)="closeInventoryModal()">×</button>
+          </header>
+
+          <form
+            class="modal-body grid-form"
+            [formGroup]="inventoryForm"
+            (ngSubmit)="saveMedicine()"
+          >
+            <label>Name <input formControlName="name" placeholder="Paracetamol 500mg" /></label>
+            <label
+              >Manufacturer <input formControlName="manufacturer" placeholder="Generic"
+            /></label>
+            <label>
+              Type
+              <select formControlName="type">
+                @for (type of medicineTypes; track type) {
+                  <option [value]="type">{{ type }}</option>
+                }
+              </select>
+            </label>
+            <label
+              >Stock quantity <input type="number" min="0" formControlName="stockQuantity"
+            /></label>
+            <label
+              >Unit price <input type="number" min="0" step="0.01" formControlName="unitPrice"
+            /></label>
+            <label>
+              Requires prescription
+              <select formControlName="requiresPrescription">
+                <option [ngValue]="true">Yes</option>
+                <option [ngValue]="false">No</option>
+              </select>
+            </label>
+            <label class="wide"
+              >Description <textarea rows="3" formControlName="description"></textarea>
+            </label>
+
+            <div class="modal-footer wide">
+              <button class="ghost" type="button" (click)="closeInventoryModal()">Cancel</button>
+              <button class="primary" type="submit" [disabled]="inventoryForm.invalid || saving">
+                {{
+                  saving
+                    ? 'Saving...'
+                    : editingInventoryMedicine
+                      ? 'Update medicine'
+                      : 'Save medicine'
+                }}
               </button>
             </div>
           </form>
@@ -300,9 +569,17 @@ export class PrescriptionsComponent implements OnInit {
   medicines: Medicine[] = [];
   prescriptions: Prescription[] = [];
   query = '';
+  inventoryQuery = '';
   showCreateModal = false;
   showMedicineModal = false;
+  showInventoryModal = false;
   selectedPrescription?: Prescription;
+  editingPrescription?: Prescription;
+  editingMedicine?: PrescriptionMedicine;
+  editingInventoryMedicine?: Medicine;
+  deletingPrescriptionId?: number;
+  deletingMedicineLineId?: number;
+  deletingInventoryMedicineId?: number;
   saving = false;
   loading = false;
   error = '';
@@ -339,6 +616,16 @@ export class PrescriptionsComponent implements OnInit {
     instructions: [''],
   });
 
+  readonly inventoryForm = this.fb.nonNullable.group({
+    name: ['', Validators.required],
+    description: [''],
+    manufacturer: ['Generic', Validators.required],
+    type: ['TABLET' as MedicineType, Validators.required],
+    stockQuantity: [0, Validators.min(0)],
+    unitPrice: [0, Validators.min(0)],
+    requiresPrescription: [true],
+  });
+
   ngOnInit(): void {
     this.loadFormOptions();
     this.loadMedicines();
@@ -347,6 +634,18 @@ export class PrescriptionsComponent implements OnInit {
 
   canCreate(): boolean {
     return this.auth.hasRole(['ADMIN', 'DOCTOR']);
+  }
+
+  canManageInventory(): boolean {
+    return this.auth.hasRole(['ADMIN', 'DOCTOR']);
+  }
+
+  canManagePrescription(prescription?: Prescription): boolean {
+    const user = this.auth.currentUser;
+    if (!user?.id || !prescription?.id) return false;
+    if (user.role === 'ADMIN') return true;
+
+    return user.role === 'DOCTOR' && prescription.doctor?.id === user.id;
   }
 
   loadFormOptions(): void {
@@ -380,43 +679,119 @@ export class PrescriptionsComponent implements OnInit {
       .getMedicines()
       .pipe(catchError(() => of([] as Medicine[])))
       .subscribe((medicines) => {
-        this.medicines = medicines ?? [];
+        this.medicines = this.sortMedicines(medicines ?? []);
       });
   }
 
   pageSubtitle(): string {
-    if (this.auth.hasRole(['PATIENT'])) return 'Review your active treatment plans and doctor instructions.';
-    if (this.auth.hasRole(['DOCTOR'])) return 'Create prescriptions and attach medication plans for your patients.';
+    if (this.auth.hasRole(['PATIENT']))
+      return 'Review your active treatment plans and doctor instructions.';
+    if (this.auth.hasRole(['DOCTOR']))
+      return 'Create, edit, and manage medication plans for your patients.';
 
     return 'Create and review patient medication plans.';
   }
 
   openCreate(): void {
+    this.editingPrescription = undefined;
     this.prescriptionForm.reset({
       patientId: '',
       doctorId: '',
       diagnosis: '',
       instructions: '',
-      validUntil: '',
+      validUntil: this.defaultValidUntil(),
     });
     this.resetMedicineForm();
+    this.showCreateModal = true;
+  }
+
+  openEdit(prescription: Prescription): void {
+    if (!this.canManagePrescription(prescription)) return;
+
+    this.editingPrescription = prescription;
+    this.prescriptionForm.reset({
+      patientId: prescription.patient?.id ? String(prescription.patient.id) : '',
+      doctorId: prescription.doctor?.id ? String(prescription.doctor.id) : '',
+      diagnosis: prescription.diagnosis ?? '',
+      instructions: prescription.instructions ?? '',
+      validUntil: prescription.validUntil ?? this.defaultValidUntil(),
+    });
     this.showCreateModal = true;
   }
 
   closeCreateModal(): void {
     this.showCreateModal = false;
     this.saving = false;
+    this.editingPrescription = undefined;
   }
 
-  openMedicineModal(prescription: Prescription): void {
+  openMedicineModal(prescription: Prescription, medicineLine?: PrescriptionMedicine): void {
+    if (!this.canManagePrescription(prescription)) return;
+
     this.selectedPrescription = prescription;
-    this.resetMedicineForm();
+    this.editingMedicine = medicineLine;
+
+    if (medicineLine) {
+      this.medicineForm.reset({
+        medicineId: medicineLine.medicine?.id ? String(medicineLine.medicine.id) : '',
+        newMedicineName: '',
+        manufacturer: medicineLine.medicine?.manufacturer || 'Generic',
+        type: medicineLine.medicine?.type || 'TABLET',
+        dosage: medicineLine.dosage || '',
+        frequency: medicineLine.frequency || '',
+        duration: medicineLine.duration || 7,
+        quantity: medicineLine.quantity || 1,
+        instructions: medicineLine.instructions || '',
+      });
+    } else {
+      this.resetMedicineForm();
+    }
+
     this.showMedicineModal = true;
   }
 
   closeMedicineModal(): void {
     this.showMedicineModal = false;
     this.selectedPrescription = undefined;
+    this.editingMedicine = undefined;
+    this.saving = false;
+  }
+
+  openCreateMedicine(): void {
+    if (!this.canManageInventory()) return;
+
+    this.editingInventoryMedicine = undefined;
+    this.inventoryForm.reset({
+      name: '',
+      description: '',
+      manufacturer: 'Generic',
+      type: 'TABLET',
+      stockQuantity: 0,
+      unitPrice: 0,
+      requiresPrescription: true,
+    });
+    this.showInventoryModal = true;
+  }
+
+  openEditMedicine(medicine: Medicine): void {
+    if (!this.canManageInventory()) return;
+
+    this.editingInventoryMedicine = medicine;
+    this.inventoryForm.reset({
+      name: medicine.name ?? '',
+      description: medicine.description ?? '',
+      manufacturer: medicine.manufacturer ?? 'Generic',
+      type: medicine.type ?? 'TABLET',
+      stockQuantity: medicine.stockQuantity ?? 0,
+      unitPrice: medicine.unitPrice ?? 0,
+      requiresPrescription: medicine.requiresPrescription ?? true,
+    });
+    this.showInventoryModal = true;
+  }
+
+  closeInventoryModal(): void {
+    this.showInventoryModal = false;
+    this.editingInventoryMedicine = undefined;
     this.saving = false;
   }
 
@@ -475,7 +850,9 @@ export class PrescriptionsComponent implements OnInit {
     forkJoin(
       records.map((prescription) => {
         if (!prescription.id) return of([] as PrescriptionMedicine[]);
-        return this.api.getPrescriptionMedicines(prescription.id).pipe(catchError(() => of([] as PrescriptionMedicine[])));
+        return this.api
+          .getPrescriptionMedicines(prescription.id)
+          .pipe(catchError(() => of([] as PrescriptionMedicine[])));
       }),
     ).subscribe((medicineLists) => {
       this.prescriptions = records.map((prescription, index) => ({
@@ -491,9 +868,18 @@ export class PrescriptionsComponent implements OnInit {
     this.loading = false;
   }
 
-  createPrescription(): void {
+  savePrescription(): void {
     if (this.prescriptionForm.invalid || !this.canCreate()) return;
 
+    if (this.editingPrescription?.id) {
+      this.updatePrescription();
+      return;
+    }
+
+    this.createPrescription();
+  }
+
+  private createPrescription(): void {
     const user = this.auth.currentUser;
     const raw = this.prescriptionForm.getRawValue();
     const doctorId = user?.role === 'DOCTOR' ? user.id : Number(raw.doctorId);
@@ -537,7 +923,58 @@ export class PrescriptionsComponent implements OnInit {
       });
   }
 
-  addMedicationToSelected(): void {
+  private updatePrescription(): void {
+    if (!this.editingPrescription?.id) return;
+
+    const raw = this.prescriptionForm.getRawValue();
+    this.saving = true;
+    this.error = '';
+
+    this.api
+      .updatePrescription(this.editingPrescription.id, {
+        diagnosis: raw.diagnosis,
+        instructions: raw.instructions,
+        validUntil: raw.validUntil,
+      })
+      .subscribe({
+        next: () => {
+          this.message = 'Prescription updated successfully.';
+          this.closeCreateModal();
+          this.reload();
+        },
+        error: (error) => {
+          this.error =
+            error.error?.message || error.error?.error || 'Could not update prescription.';
+          this.saving = false;
+        },
+      });
+  }
+
+  deletePrescription(prescription: Prescription): void {
+    if (!prescription.id || !this.canManagePrescription(prescription)) return;
+
+    const confirmed = window.confirm(
+      'Delete this prescription and its medication lines? This cannot be undone.',
+    );
+    if (!confirmed) return;
+
+    this.deletingPrescriptionId = prescription.id;
+    this.error = '';
+
+    this.api.deletePrescription(prescription.id).subscribe({
+      next: () => {
+        this.message = 'Prescription deleted successfully.';
+        this.prescriptions = this.prescriptions.filter((item) => item.id !== prescription.id);
+        this.deletingPrescriptionId = undefined;
+      },
+      error: (error) => {
+        this.error = error.error?.message || error.error?.error || 'Could not delete prescription.';
+        this.deletingPrescriptionId = undefined;
+      },
+    });
+  }
+
+  saveMedicationToSelected(): void {
     if (!this.selectedPrescription?.id) return;
 
     if (!this.hasMedicationDraft()) {
@@ -548,54 +985,179 @@ export class PrescriptionsComponent implements OnInit {
     this.saving = true;
     this.error = '';
 
-    this.createOrAttachMedicine(this.selectedPrescription.id).subscribe({
+    const request: Observable<string | PrescriptionMedicine> = this.editingMedicine?.id
+      ? this.updateMedicationLine(this.selectedPrescription.id, this.editingMedicine.id)
+      : this.createOrAttachMedicine(this.selectedPrescription.id);
+
+    request.subscribe({
       next: () => {
-        this.message = 'Medication added successfully.';
+        this.message = this.editingMedicine
+          ? 'Medication updated successfully.'
+          : 'Medication added successfully.';
         this.closeMedicineModal();
         this.loadMedicines();
         this.reload();
       },
-      error: (error) => {
-        this.error = error.error?.message || error.error?.error || 'Could not add medication.';
+      error: (error: any) => {
+        this.error = error.error?.message || error.error?.error || 'Could not save medication.';
         this.saving = false;
       },
     });
   }
 
-  createOrAttachMedicine(prescriptionId: number) {
-    const raw = this.medicineForm.getRawValue();
-    const medicineId = Number(raw.medicineId);
-    const existingMedicine = Number.isFinite(medicineId) && medicineId > 0
-      ? this.medicines.find((medicine) => medicine.id === medicineId)
-      : undefined;
-
-    const medicineRequest = existingMedicine
-      ? of(existingMedicine)
-      : this.api.createMedicine({
-          name: raw.newMedicineName.trim(),
-          manufacturer: raw.manufacturer || 'Generic',
-          type: raw.type,
-          stockQuantity: Math.max(0, Number(raw.quantity) || 0),
-          requiresPrescription: true,
-        });
-
-    return medicineRequest.pipe(
+  createOrAttachMedicine(prescriptionId: number): Observable<string> {
+    return this.resolveMedicineFromForm().pipe(
       switchMap((medicine) =>
-        this.api.addMedicineToPrescription(prescriptionId, {
-          medicine: { id: medicine.id },
-          dosage: raw.dosage || 'As directed',
-          frequency: raw.frequency || 'As directed',
-          duration: Math.max(1, Number(raw.duration) || 1),
-          quantity: Math.max(1, Number(raw.quantity) || 1),
-          instructions: raw.instructions,
-        }),
+        this.api.addMedicineToPrescription(prescriptionId, this.buildMedicineLinePayload(medicine)),
       ),
     );
   }
 
+  updateMedicationLine(
+    prescriptionId: number,
+    medicineLineId: number,
+  ): Observable<PrescriptionMedicine> {
+    return this.resolveMedicineFromForm().pipe(
+      switchMap((medicine) =>
+        this.api.updatePrescriptionMedicine(
+          prescriptionId,
+          medicineLineId,
+          this.buildMedicineLinePayload(medicine),
+        ),
+      ),
+    );
+  }
+
+  deleteMedicationLine(prescription: Prescription, item: PrescriptionMedicine): void {
+    if (!prescription.id || !item.id || !this.canManagePrescription(prescription)) return;
+
+    const confirmed = window.confirm('Delete this medication line from the prescription?');
+    if (!confirmed) return;
+
+    this.deletingMedicineLineId = item.id;
+    this.error = '';
+
+    this.api.deletePrescriptionMedicine(prescription.id, item.id).subscribe({
+      next: () => {
+        this.message = 'Medication removed successfully.';
+        this.deletingMedicineLineId = undefined;
+        this.reload();
+      },
+      error: (error) => {
+        this.error = error.error?.message || error.error?.error || 'Could not remove medication.';
+        this.deletingMedicineLineId = undefined;
+      },
+    });
+  }
+
+  saveMedicine(): void {
+    if (this.inventoryForm.invalid || !this.canManageInventory()) return;
+
+    const raw = this.inventoryForm.getRawValue();
+    const payload: Partial<Medicine> = {
+      name: raw.name.trim(),
+      description: raw.description,
+      manufacturer: raw.manufacturer || 'Generic',
+      type: raw.type,
+      stockQuantity: Math.max(0, Number(raw.stockQuantity) || 0),
+      unitPrice: Math.max(0, Number(raw.unitPrice) || 0),
+      requiresPrescription: raw.requiresPrescription,
+    };
+
+    this.saving = true;
+    this.error = '';
+
+    const request = this.editingInventoryMedicine?.id
+      ? this.api.updateMedicine(this.editingInventoryMedicine.id, payload)
+      : this.api.createMedicine(payload);
+
+    request.subscribe({
+      next: () => {
+        this.message = this.editingInventoryMedicine
+          ? 'Medicine updated successfully.'
+          : 'Medicine created successfully.';
+        this.closeInventoryModal();
+        this.loadMedicines();
+        this.reload();
+      },
+      error: (error) => {
+        this.error = error.error?.message || error.error?.error || 'Could not save medicine.';
+        this.saving = false;
+      },
+    });
+  }
+
+  deleteMedicine(medicine: Medicine): void {
+    if (!medicine.id || !this.canManageInventory()) return;
+
+    const confirmed = window.confirm(
+      'Delete this medicine from the inventory? Medicines already used in prescriptions will be blocked by the backend.',
+    );
+    if (!confirmed) return;
+
+    this.deletingInventoryMedicineId = medicine.id;
+    this.error = '';
+
+    this.api.deleteMedicine(medicine.id).subscribe({
+      next: () => {
+        this.message = 'Medicine deleted successfully.';
+        this.deletingInventoryMedicineId = undefined;
+        this.loadMedicines();
+      },
+      error: (error) => {
+        this.error = error.error?.message || error.error?.error || 'Could not delete medicine.';
+        this.deletingInventoryMedicineId = undefined;
+      },
+    });
+  }
+
+  private resolveMedicineFromForm(): Observable<Medicine> {
+    const raw = this.medicineForm.getRawValue();
+    const medicineId = Number(raw.medicineId);
+    const existingMedicine =
+      Number.isFinite(medicineId) && medicineId > 0
+        ? this.medicines.find((medicine) => medicine.id === medicineId)
+        : undefined;
+
+    if (existingMedicine) {
+      return of(existingMedicine);
+    }
+
+    if (raw.newMedicineName.trim()) {
+      return this.api.createMedicine({
+        name: raw.newMedicineName.trim(),
+        manufacturer: raw.manufacturer || 'Generic',
+        type: raw.type,
+        stockQuantity: Math.max(0, Number(raw.quantity) || 0),
+        requiresPrescription: true,
+      });
+    }
+
+    if (this.editingMedicine?.medicine?.id) {
+      return of(this.editingMedicine.medicine as Medicine);
+    }
+
+    throw new Error('No medicine selected');
+  }
+
+  private buildMedicineLinePayload(medicine: Medicine): Partial<PrescriptionMedicine> {
+    const raw = this.medicineForm.getRawValue();
+
+    return {
+      medicine: { id: medicine.id },
+      dosage: raw.dosage || 'As directed',
+      frequency: raw.frequency || 'As directed',
+      duration: Math.max(1, Number(raw.duration) || 1),
+      quantity: Math.max(1, Number(raw.quantity) || 1),
+      instructions: raw.instructions,
+    };
+  }
+
   hasMedicationDraft(): boolean {
     const raw = this.medicineForm.getRawValue();
-    return Boolean(raw.medicineId || raw.newMedicineName.trim());
+    return Boolean(
+      raw.medicineId || raw.newMedicineName.trim() || this.editingMedicine?.medicine?.id,
+    );
   }
 
   filteredPrescriptions(): Prescription[] {
@@ -617,24 +1179,35 @@ export class PrescriptionsComponent implements OnInit {
     );
   }
 
+  filteredMedicines(): Medicine[] {
+    const query = this.inventoryQuery.trim().toLowerCase();
+
+    if (!query) return this.medicines;
+
+    return this.medicines.filter((medicine) =>
+      [medicine.name, medicine.manufacturer, medicine.type, medicine.description]
+        .join(' ')
+        .toLowerCase()
+        .includes(query),
+    );
+  }
+
   validCount(): number {
-    return this.prescriptions.filter((prescription) => this.validityText(prescription) === 'Valid').length;
+    return this.prescriptions.filter((prescription) => this.validityText(prescription) === 'Valid')
+      .length;
   }
 
   medicationCount(): number {
-    return this.prescriptions.reduce((count, prescription) => count + (prescription.medicines?.length ?? 0), 0);
+    return this.prescriptions.reduce(
+      (count, prescription) => count + (prescription.medicines?.length ?? 0),
+      0,
+    );
   }
 
-  expiringSoonCount(): number {
-    const now = new Date();
-    const inTwoWeeks = new Date();
-    inTwoWeeks.setDate(now.getDate() + 14);
-
-    return this.prescriptions.filter((prescription) => {
-      if (!prescription.validUntil) return false;
-      const validUntil = new Date(prescription.validUntil);
-      return validUntil >= now && validUntil <= inTwoWeeks;
-    }).length;
+  lowStockCount(): number {
+    return this.medicines.filter(
+      (medicine) => (medicine.stockQuantity ?? 0) > 0 && (medicine.stockQuantity ?? 0) < 10,
+    ).length;
   }
 
   validityText(prescription?: Prescription): string {
@@ -651,6 +1224,24 @@ export class PrescriptionsComponent implements OnInit {
     return this.validityText(prescription) === 'Valid' ? 'status confirmed' : 'status cancelled';
   }
 
+  medicineStockText(medicine: Medicine): string {
+    const stock = medicine.stockQuantity ?? 0;
+
+    if (stock <= 0) return 'Out of stock';
+    if (stock < 10) return 'Low stock';
+
+    return 'In stock';
+  }
+
+  medicineStockClass(medicine: Medicine): string {
+    const stock = medicine.stockQuantity ?? 0;
+
+    if (stock <= 0) return 'status cancelled';
+    if (stock < 10) return 'status pending';
+
+    return 'status confirmed';
+  }
+
   patientName(prescription?: Prescription): string {
     const patient = prescription?.patient;
     const name = `${patient?.firstName ?? ''} ${patient?.lastName ?? ''}`.trim();
@@ -664,9 +1255,21 @@ export class PrescriptionsComponent implements OnInit {
   }
 
   emptyText(): string {
-    if (this.auth.hasRole(['PATIENT'])) return 'No prescriptions have been attached to your patient profile yet.';
-    if (this.auth.hasRole(['DOCTOR'])) return 'No prescriptions have been written from your doctor profile yet.';
+    if (this.auth.hasRole(['PATIENT']))
+      return 'No prescriptions have been attached to your patient profile yet.';
+    if (this.auth.hasRole(['DOCTOR']))
+      return 'No prescriptions have been written from your doctor profile yet.';
 
     return 'No prescriptions found.';
+  }
+
+  private sortMedicines(medicines: Medicine[]): Medicine[] {
+    return [...medicines].sort((a, b) => `${a.name ?? ''}`.localeCompare(`${b.name ?? ''}`));
+  }
+
+  private defaultValidUntil(): string {
+    const date = new Date();
+    date.setMonth(date.getMonth() + 1);
+    return date.toISOString().slice(0, 10);
   }
 }

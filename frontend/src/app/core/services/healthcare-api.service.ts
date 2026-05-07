@@ -31,7 +31,9 @@ export class HealthcareApiService {
     return this.http.get<DashboardStats>(`${this.api}/admin/dashboard`);
   }
 
-  createAdminUser(payload: Partial<User>): Observable<{ message: string; email: string; role: string }> {
+  createAdminUser(
+    payload: Partial<User>,
+  ): Observable<{ message: string; email: string; role: string }> {
     return this.http.post<{ message: string; email: string; role: string }>(
       `${this.api}/admin/create-admin`,
       payload,
@@ -134,8 +136,16 @@ export class HealthcareApiService {
     return this.http.post<Appointment>(`${this.api}/appointments`, appointment);
   }
 
+  updateAppointment(id: number, appointment: Partial<Appointment>): Observable<Appointment> {
+    return this.http.put<Appointment>(`${this.api}/appointments/${id}`, appointment);
+  }
+
   updateAppointmentStatus(id: number, status: AppointmentStatus): Observable<Appointment> {
     return this.http.put<Appointment>(`${this.api}/appointments/${id}/status?status=${status}`, {});
+  }
+
+  cancelAppointment(id: number): Observable<Appointment> {
+    return this.http.delete<Appointment>(`${this.api}/appointments/${id}`);
   }
 
   getValidPrescriptions(): Observable<Prescription[]> {
@@ -162,8 +172,14 @@ export class HealthcareApiService {
     return this.http.put<Prescription>(`${this.api}/prescriptions/${id}`, prescription);
   }
 
+  deletePrescription(id: number): Observable<string> {
+    return this.http.delete(`${this.api}/prescriptions/${id}`, { responseType: 'text' });
+  }
+
   getPrescriptionMedicines(prescriptionId: number): Observable<PrescriptionMedicine[]> {
-    return this.http.get<PrescriptionMedicine[]>(`${this.api}/prescriptions/${prescriptionId}/medicines`);
+    return this.http.get<PrescriptionMedicine[]>(
+      `${this.api}/prescriptions/${prescriptionId}/medicines`,
+    );
   }
 
   addMedicineToPrescription(
@@ -173,6 +189,26 @@ export class HealthcareApiService {
     return this.http.post(`${this.api}/prescriptions/${prescriptionId}/medicines`, medicine, {
       responseType: 'text',
     });
+  }
+
+  updatePrescriptionMedicine(
+    prescriptionId: number,
+    medicineLineId: number,
+    medicine: Partial<PrescriptionMedicine>,
+  ): Observable<PrescriptionMedicine> {
+    return this.http.put<PrescriptionMedicine>(
+      `${this.api}/prescriptions/${prescriptionId}/medicines/${medicineLineId}`,
+      medicine,
+    );
+  }
+
+  deletePrescriptionMedicine(prescriptionId: number, medicineLineId: number): Observable<string> {
+    return this.http.delete(
+      `${this.api}/prescriptions/${prescriptionId}/medicines/${medicineLineId}`,
+      {
+        responseType: 'text',
+      },
+    );
   }
 
   getMedicines(): Observable<Medicine[]> {
@@ -187,12 +223,22 @@ export class HealthcareApiService {
     return this.http.post<Medicine>(`${this.api}/medicines`, medicine);
   }
 
+  updateMedicine(id: number, medicine: Partial<Medicine>): Observable<Medicine> {
+    return this.http.put<Medicine>(`${this.api}/medicines/${id}`, medicine);
+  }
+
+  deleteMedicine(id: number): Observable<string> {
+    return this.http.delete(`${this.api}/medicines/${id}`, { responseType: 'text' });
+  }
+
   getConsultationNotes(): Observable<ConsultationNote[]> {
     return this.http.get<ConsultationNote[]>(`${this.api}/consultation-notes`);
   }
 
   getAppointmentConsultationNote(appointmentId: number): Observable<ConsultationNote> {
-    return this.http.get<ConsultationNote>(`${this.api}/consultation-notes/appointment/${appointmentId}`);
+    return this.http.get<ConsultationNote>(
+      `${this.api}/consultation-notes/appointment/${appointmentId}`,
+    );
   }
 
   getPatientConsultationNotes(patientId: number): Observable<ConsultationNote[]> {
@@ -207,7 +253,10 @@ export class HealthcareApiService {
     return this.http.post<ConsultationNote>(`${this.api}/consultation-notes`, note);
   }
 
-  updateConsultationNote(id: number, note: Partial<ConsultationNote>): Observable<ConsultationNote> {
+  updateConsultationNote(
+    id: number,
+    note: Partial<ConsultationNote>,
+  ): Observable<ConsultationNote> {
     return this.http.put<ConsultationNote>(`${this.api}/consultation-notes/${id}`, note);
   }
 
@@ -223,12 +272,20 @@ export class HealthcareApiService {
     return this.http.get<LabResult[]>(`${this.api}/lab-results/doctor/${doctorId}`);
   }
 
+  getMyUploadedLabResults(): Observable<LabResult[]> {
+    return this.http.get<LabResult[]>(`${this.api}/lab-results/my-uploads`);
+  }
+
   createLabResult(labResult: Partial<LabResult>): Observable<LabResult> {
     return this.http.post<LabResult>(`${this.api}/lab-results`, labResult);
   }
 
   updateLabResult(id: number, labResult: Partial<LabResult>): Observable<LabResult> {
     return this.http.put<LabResult>(`${this.api}/lab-results/${id}`, labResult);
+  }
+
+  deleteLabResult(id: number): Observable<string> {
+    return this.http.delete(`${this.api}/lab-results/${id}`, { responseType: 'text' });
   }
 
   getVitalSigns(): Observable<VitalSign[]> {
@@ -245,6 +302,10 @@ export class HealthcareApiService {
 
   updateVitalSign(id: number, vitalSign: Partial<VitalSign>): Observable<VitalSign> {
     return this.http.put<VitalSign>(`${this.api}/vital-signs/${id}`, vitalSign);
+  }
+
+  deleteVitalSign(id: number): Observable<string> {
+    return this.http.delete(`${this.api}/vital-signs/${id}`, { responseType: 'text' });
   }
 
   getEmergencies(): Observable<EmergencyAlert[]> {
@@ -264,7 +325,10 @@ export class HealthcareApiService {
   }
 
   updateEmergencyStatus(id: number, status: EmergencyStatus): Observable<EmergencyAlert> {
-    return this.http.put<EmergencyAlert>(`${this.api}/emergencies/${id}/status?status=${status}`, {});
+    return this.http.put<EmergencyAlert>(
+      `${this.api}/emergencies/${id}/status?status=${status}`,
+      {},
+    );
   }
 
   resolveEmergency(id: number, resolution = 'Handled by care team'): Observable<EmergencyAlert> {
